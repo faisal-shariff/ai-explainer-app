@@ -127,7 +127,7 @@ p {
 
 .card-label,
 .eyebrow,
-.audience-label,
+.mode-label,
 .saved-date,
 .learning-label {
   font-size: 0.74rem;
@@ -301,19 +301,19 @@ p {
   font-weight: 700;
 }
 
-.audience-group {
+.mode-group {
   margin-top: 10px;
   display: grid;
   gap: 8px;
 }
 
-.audience-options {
+.mode-options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.audience-chip {
+.mode-chip {
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -324,7 +324,7 @@ p {
   font-weight: 700;
 }
 
-.audience-chip.active {
+.mode-chip.active {
   color: #fff;
   border-color: transparent;
   background: linear-gradient(140deg, #142846, #2f4e7d);

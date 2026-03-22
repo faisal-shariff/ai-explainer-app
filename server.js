@@ -47,6 +47,45 @@ const CHARACTER_ROSTER = [
   }
 ];
 
+const EXPLANATION_MODE_PROFILES = {
+  quick: {
+    key: "quick",
+    label: "Quick explainer",
+    promptStyle: "Prioritize a fast, high-signal explanation with minimal jargon and compact dialogue.",
+    depthRule: "Favor intuitive analogies and practical meaning over low-level detail.",
+    miraMinWords: 8,
+    miraMaxWords: 13,
+    otherMaxWords: 9
+  },
+  clear: {
+    key: "clear",
+    label: "Clear explainer",
+    promptStyle: "Balance clarity and mechanism detail in plain language.",
+    depthRule: "Keep explanations accurate and easy to follow for mixed experience levels.",
+    miraMinWords: 10,
+    miraMaxWords: 16,
+    otherMaxWords: 11
+  },
+  detailed: {
+    key: "detailed",
+    label: "Detailed explainer",
+    promptStyle: "Increase mechanism depth and include richer, concrete detail without becoming verbose.",
+    depthRule: "Use precise terminology where helpful and build understanding step by step.",
+    miraMinWords: 12,
+    miraMaxWords: 19,
+    otherMaxWords: 13
+  },
+  technical: {
+    key: "technical",
+    label: "Technical explainer",
+    promptStyle: "Use technical precision, include system behavior and tradeoffs, and reduce metaphor reliance.",
+    depthRule: "Assume the user can handle domain terms when they improve correctness.",
+    miraMinWords: 12,
+    miraMaxWords: 18,
+    otherMaxWords: 13
+  }
+};
+
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -86,14 +125,20 @@ const server = createServer(async (req, res) => {
 
       const body = await readJsonBody(req);
       const concept = typeof body.concept === "string" ? body.concept.trim() : "";
-      const audience = typeof body.audience === "string" ? body.audience.trim() : "general";
+      const explanationMode = normalizeExplanationMode(
+        typeof body.explanationMode === "string"
+          ? body.explanationMode
+          : typeof body.audience === "string"
+            ? body.audience
+            : "clear"
+      );
 
       if (!concept) {
         sendJson(res, 400, { error: "Concept is required." });
         return;
       }
 
-      const comic = await buildComic(concept, audience);
+      const comic = await buildComic(concept, explanationMode);
       sendJson(res, 200, { comic });
       return;
     }
@@ -125,8 +170,9 @@ if (env.NO_LISTEN !== "1") {
   });
 }
 
-async function buildComic(concept, audience) {
-  const script = await generateComicScript(concept, audience);
+async function buildComic(concept, explanationMode) {
+  const modeProfile = getExplanationModeProfile(explanationMode);
+  const script = await generateComicScript(concept, explanationMode);
   const castReference = await getCanonicalCastReference();
   const castReferenceImageDataUrl = castReference.imageDataUrl;
   const panels = [];
@@ -149,7 +195,10 @@ async function buildComic(concept, audience) {
     characterRoster: CHARACTER_ROSTER,
     castReferenceImageDataUrl,
     concept,
-    audience,
+    explanationMode,
+    modeLabel: modeProfile.label,
+    audience: explanationMode,
+    audienceLabel: modeProfile.label,
     generatedAt: new Date().toISOString()
   };
 }
@@ -232,17 +281,23 @@ async function getCanonicalCastReference({ forceRefresh = false } = {}) {
   return castReferenceCache;
 }
 
-async function generateComicScript(concept, audience) {
+async function generateComicScript(concept, explanationMode) {
+  const modeProfile = getExplanationModeProfile(explanationMode);
+  const simpleRange = getPanelRange("simple", explanationMode);
+  const mediumRange = getPanelRange("medium", explanationMode);
+  const advancedRange = getPanelRange("advanced", explanationMode);
+
   const prompt = [
-    "You write accurate, engaging, beginner-friendly visual explainers about AI concepts.",
+    "You write accurate, engaging visual explainers about AI concepts.",
     "Create an ORIGINAL illustrated sequence inspired by workplace satire, without copying Dilbert or any existing copyrighted characters.",
-    `Primary audience: ${audience}. Adapt the language, examples, and stakes to that audience.`,
+    `Explanation mode: ${modeProfile.label} (${modeProfile.key}). ${modeProfile.promptStyle}`,
+    `Depth guidance: ${modeProfile.depthRule}`,
     "Prioritize factual correctness, clarity, and insight over humor.",
     "Use light workplace wit only when it helps the explanation land. Do not force punchlines.",
-    "Infer complexity from the concept and choose panel count with this strict rubric:",
-    "- simple: 4 panels",
-    "- medium: 5 or 6 panels",
-    "- advanced: 6 to 8 panels",
+    "Infer complexity from the concept and choose panel count with this strict rubric for this mode:",
+    `- simple: ${formatRange(simpleRange)} panels`,
+    `- medium: ${formatRange(mediumRange)} panels`,
+    `- advanced: ${formatRange(advancedRange)} panels`,
     "Use this recurring cast when relevant:",
     ...CHARACTER_ROSTER.map((character) => `- ${character.name}: ${character.role}; ${character.personality}; ${character.look}`),
     `Concept to explain: ${concept}`,
@@ -259,7 +314,7 @@ async function generateComicScript(concept, audience) {
         title: "Short punchy title",
         hook: "One-sentence premise",
         summary: "Two-sentence explanation in plain English",
-        audienceLabel: "short user-facing audience label",
+        modeLabel: "short user-facing label for explanation mode",
         complexity: "simple | medium | advanced",
         panelCount: 5,
         shareCaption: "One short line people would want to share",
@@ -296,8 +351,8 @@ async function generateComicScript(concept, audience) {
     "- Keep dialogue concise and readable inside each panel.",
     "- Use at most 2 dialogue lines per panel.",
     "- Use 2 to 3 characters per panel max.",
-    "- Keep non-expert/question lines short (usually 10 words or fewer).",
-    "- When Mira speaks, include one concrete mechanism detail in 10 to 16 words.",
+    `- Keep non-expert/question lines short (usually ${modeProfile.otherMaxWords} words or fewer).`,
+    `- When Mira speaks, include one concrete mechanism detail in ${modeProfile.miraMinWords} to ${modeProfile.miraMaxWords} words.`,
     "- Prefer Mira as dialogue line 2 when present, so line 1 sets up and line 2 clarifies.",
     "- In two-line panels, line 1 is setup/question and line 2 is response/clarification.",
     "- Avoid trailing ellipses unless a sentence is intentionally interrupted.",
@@ -329,7 +384,7 @@ async function generateComicScript(concept, audience) {
     throw createHttpError(502, "Gemini returned malformed comic JSON.");
   }
 
-  return normalizeComic(parsed, concept);
+  return normalizeComic(parsed, concept, explanationMode);
 }
 
 async function generateCanonicalCastReferenceImage() {
@@ -582,15 +637,18 @@ async function callGemini({ model, body }) {
   return response.json();
 }
 
-function normalizeComic(raw, concept) {
+function normalizeComic(raw, concept, explanationMode) {
+  const modeProfile = getExplanationModeProfile(explanationMode);
   const fallbackComplexity = "medium";
   const normalizedComplexity = ["simple", "medium", "advanced"].includes(raw.complexity)
     ? raw.complexity
     : fallbackComplexity;
-  const panelRange = getPanelRange(normalizedComplexity);
+  const panelRange = getPanelRange(normalizedComplexity, explanationMode);
   const rawPanels = Array.isArray(raw.panels) ? raw.panels : [];
   const boundedPanelCount = clamp(Number(raw.panelCount) || rawPanels.length || panelRange.min, panelRange.min, panelRange.max);
-  const panels = rawPanels.slice(0, boundedPanelCount).map((panel, index) => normalizePanel(panel, index + 1));
+  const panels = rawPanels
+    .slice(0, boundedPanelCount)
+    .map((panel, index) => normalizePanel(panel, index + 1, explanationMode));
 
   while (panels.length < boundedPanelCount) {
     const fallbackPurpose =
@@ -638,7 +696,10 @@ function normalizeComic(raw, concept) {
       raw.summary,
       `This visual explainer covers ${concept} with a clear workplace analogy and an accurate takeaway.`
     ),
-    audienceLabel: normalizeText(raw.audienceLabel, "General audience"),
+    modeLabel: normalizeText(raw.modeLabel, modeProfile.label),
+    explanationMode,
+    audience: explanationMode,
+    audienceLabel: normalizeText(raw.audienceLabel, modeProfile.label),
     complexity: normalizedComplexity,
     panelCount: boundedPanelCount,
     shareCaption: normalizeText(raw.shareCaption, `A clear visual breakdown of ${concept} for your team.`),
@@ -651,7 +712,7 @@ function normalizeComic(raw, concept) {
   };
 }
 
-function normalizePanel(panel, panelNumber) {
+function normalizePanel(panel, panelNumber, explanationMode) {
   const characters = normalizeCharacters(panel.characters);
   const dialogue = Array.isArray(panel.dialogue)
     ? panel.dialogue
@@ -670,7 +731,8 @@ function normalizePanel(panel, panelNumber) {
           line: "Let me explain the part everyone pretends to understand."
         }
       ],
-    normalizeText(panel?.purpose, panelNumber === 1 ? "misunderstanding" : "takeaway")
+    normalizeText(panel?.purpose, panelNumber === 1 ? "misunderstanding" : "takeaway"),
+    explanationMode
   );
   const baseStaging = normalizeStaging(panel.staging, characters);
   const alignedStaging = alignStagingWithDialogue(baseStaging, finalDialogue, characters);
@@ -726,7 +788,8 @@ function normalizeStaging(staging, characters) {
   return result;
 }
 
-function tuneDialogueForReadability(dialogue, purpose) {
+function tuneDialogueForReadability(dialogue, purpose, explanationMode) {
+  const modeProfile = getExplanationModeProfile(explanationMode);
   const detailByPurpose = {
     misunderstanding: "It usually misses context, not raw data.",
     failure: "That fails when the task needs broader context.",
@@ -741,15 +804,15 @@ function tuneDialogueForReadability(dialogue, purpose) {
     let text = normalizeText(line?.line, "Let me make that practical.");
 
     if (speaker === "Mira") {
-      if (countWords(text) < 10) {
+      if (countWords(text) < modeProfile.miraMinWords) {
         const extra = detailByPurpose[purpose] || detailByPurpose.mechanism;
         text = `${stripTrailingPunctuation(text)} ${extra}`;
       }
-      text = clampWords(text, 16);
+      text = clampWords(text, modeProfile.miraMaxWords);
       return { speaker, line: text };
     }
 
-    return { speaker, line: clampWords(text, 11) };
+    return { speaker, line: clampWords(text, modeProfile.otherMaxWords) };
   });
 }
 
@@ -869,7 +932,29 @@ function normalizeText(value, fallback) {
   return cleaned || fallback;
 }
 
-function getPanelRange(complexity) {
+function getPanelRange(complexity, explanationMode = "clear") {
+  const mode = normalizeExplanationMode(explanationMode);
+
+  if (mode === "quick") {
+    if (complexity === "simple") {
+      return { min: 3, max: 4 };
+    }
+    if (complexity === "advanced") {
+      return { min: 5, max: 6 };
+    }
+    return { min: 4, max: 5 };
+  }
+
+  if (mode === "detailed" || mode === "technical") {
+    if (complexity === "simple") {
+      return { min: 4, max: 5 };
+    }
+    if (complexity === "advanced") {
+      return { min: 7, max: 8 };
+    }
+    return { min: 6, max: 7 };
+  }
+
   if (complexity === "simple") {
     return { min: 4, max: 4 };
   }
@@ -879,6 +964,37 @@ function getPanelRange(complexity) {
   }
 
   return { min: 5, max: 6 };
+}
+
+function formatRange(range) {
+  return range.min === range.max ? String(range.min) : `${range.min} to ${range.max}`;
+}
+
+function normalizeExplanationMode(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(EXPLANATION_MODE_PROFILES, normalized)) {
+    return normalized;
+  }
+
+  return mapLegacyAudienceToMode(normalized);
+}
+
+function mapLegacyAudienceToMode(value) {
+  if (value === "engineer") {
+    return "technical";
+  }
+  if (value === "founder" || value === "product manager" || value === "pm") {
+    return "quick";
+  }
+  if (value === "student") {
+    return "detailed";
+  }
+  return "clear";
+}
+
+function getExplanationModeProfile(explanationMode) {
+  const mode = normalizeExplanationMode(explanationMode);
+  return EXPLANATION_MODE_PROFILES[mode] || EXPLANATION_MODE_PROFILES.clear;
 }
 
 function clamp(value, min, max) {

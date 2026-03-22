@@ -36,7 +36,7 @@ const storageKey = "concept-strip-studio.saved";
 const queryConcept = new URLSearchParams(window.location.search).get("concept");
 const isFileProtocol = window.location.protocol === "file:";
 const apiRoot = new URL("./", window.location.href);
-let selectedAudience = "general";
+let selectedExplanationMode = "clear";
 
 const form = document.querySelector("#generator-form");
 const input = document.querySelector("#concept-input");
@@ -54,7 +54,7 @@ const resultCard = document.querySelector("#result-card");
 const comicHook = document.querySelector("#comic-hook");
 const comicTitle = document.querySelector("#comic-title");
 const comicSummary = document.querySelector("#comic-summary");
-const audienceBadge = document.querySelector("#audience-badge");
+const modeBadge = document.querySelector("#mode-badge");
 const complexityBadge = document.querySelector("#complexity-badge");
 const panelBadge = document.querySelector("#panel-badge");
 const captionBadge = document.querySelector("#caption-badge");
@@ -66,7 +66,7 @@ const exportButton = document.querySelector("#export-button");
 const shareButton = document.querySelector("#share-button");
 const savedGrid = document.querySelector("#saved-grid");
 const savedCardTemplate = document.querySelector("#saved-card-template");
-const audienceOptions = document.querySelector("#audience-options");
+const modeOptions = document.querySelector("#mode-options");
 const sessionStamp = document.querySelector("#session-stamp");
 const teamPhotoFrame = document.querySelector(".team-photo-frame");
 const teamPhotoImage = document.querySelector("#team-photo-image");
@@ -85,7 +85,7 @@ renderSuggestions();
 renderCastSelector();
 renderSavedComics();
 initializeRuntime();
-initializeAudienceOptions();
+initializeExplanationModeOptions();
 renderSessionStamp();
 initializeTeamPhoto();
 
@@ -117,7 +117,7 @@ async function handleGenerate(event) {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ concept, audience: selectedAudience })
+      body: JSON.stringify({ concept, explanationMode: selectedExplanationMode })
     });
 
     const data = await response.json();
@@ -149,11 +149,15 @@ function renderSuggestions() {
   });
 }
 
-function initializeAudienceOptions() {
-  audienceOptions.querySelectorAll(".audience-chip").forEach((chip) => {
+function initializeExplanationModeOptions() {
+  if (!modeOptions) {
+    return;
+  }
+
+  modeOptions.querySelectorAll(".mode-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
-      selectedAudience = chip.dataset.audience || "general";
-      audienceOptions.querySelectorAll(".audience-chip").forEach((button) => {
+      selectedExplanationMode = chip.dataset.mode || "clear";
+      modeOptions.querySelectorAll(".mode-chip").forEach((button) => {
         button.classList.toggle("active", button === chip);
       });
     });
@@ -306,7 +310,7 @@ function renderComic(comic) {
   comicHook.textContent = comic.hook;
   comicTitle.textContent = comic.title;
   comicSummary.textContent = comic.summary;
-  audienceBadge.textContent = comic.audienceLabel || formatAudienceLabel(comic.audience);
+  modeBadge.textContent = comic.modeLabel || formatExplanationModeLabel(comic.explanationMode || selectedExplanationMode);
   complexityBadge.textContent = `${capitalize(comic.complexity)} concept`;
   panelBadge.textContent = `${comic.panelCount} panels`;
   captionBadge.textContent = comic.shareCaption;
@@ -944,20 +948,18 @@ function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function formatAudienceLabel(value) {
-  if (!value) {
-    return "General audience";
+function formatExplanationModeLabel(value) {
+  const mode = String(value || "").toLowerCase();
+  if (mode === "quick") {
+    return "Quick explainer";
   }
-
-  if (value === "product manager") {
-    return "Product managers";
+  if (mode === "detailed") {
+    return "Detailed explainer";
   }
-
-  if (value === "general") {
-    return "General audience";
+  if (mode === "technical") {
+    return "Technical explainer";
   }
-
-  return `${capitalize(value)} audience`;
+  return "Clear explainer";
 }
 
 function loadSavedComics() {

@@ -64,14 +64,13 @@
             <p class="card-label">Create Visual Brief</p>
             <label class="prompt-label" for="concept-input">What do you want to understand?</label>
 
-            <div class="audience-group">
-              <span class="audience-label">Pick your audience</span>
-              <div id="audience-options" class="audience-options">
-                <button class="audience-chip active" type="button" data-audience="general">Anyone</button>
-                <button class="audience-chip" type="button" data-audience="student">Student</button>
-                <button class="audience-chip" type="button" data-audience="product manager">PM</button>
-                <button class="audience-chip" type="button" data-audience="founder">Founder</button>
-                <button class="audience-chip" type="button" data-audience="engineer">Engineer</button>
+            <div class="mode-group">
+              <span class="mode-label">Explanation mode</span>
+              <div id="mode-options" class="mode-options">
+                <button class="mode-chip active" type="button" data-mode="clear">Clear</button>
+                <button class="mode-chip" type="button" data-mode="quick">Quick</button>
+                <button class="mode-chip" type="button" data-mode="detailed">Detailed</button>
+                <button class="mode-chip" type="button" data-mode="technical">Technical</button>
               </div>
             </div>
 
@@ -86,7 +85,7 @@
               />
               <button id="generate-button" type="submit">Generate brief</button>
             </div>
-            <p id="status-text" class="status-text">We pick the right depth and panel count automatically.</p>
+            <p id="status-text" class="status-text">We tune depth and panel count from your explanation mode and concept complexity.</p>
             <div id="suggestions" class="suggestions"></div>
           </form>
 
@@ -162,7 +161,7 @@
             </div>
 
             <div class="meta-strip">
-              <span id="audience-badge" class="meta-pill"></span>
+              <span id="mode-badge" class="meta-pill"></span>
               <span id="complexity-badge" class="meta-pill"></span>
               <span id="panel-badge" class="meta-pill"></span>
               <span id="caption-badge" class="meta-pill highlight-pill"></span>
