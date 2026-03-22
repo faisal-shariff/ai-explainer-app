@@ -1,38 +1,87 @@
-# Concept Strip Studio
+# AI Explainer App
 
-Minimal web MVP for turning hard AI concepts into clear, engaging office-strip explainers.
+AI Explainer App turns difficult AI concepts into clear visual explainers with a recurring cast, structured panel flow, and export-ready PNG output.
 
-## What it does
+This is a local MVP built as a small web app. You enter a concept like `transformers`, `fine-tuning`, or `mixture of experts`, and the app generates a multi-panel visual walkthrough designed to make the idea easier to understand.
 
-- Accepts free-text concepts and suggestion chips.
-- Infers concept complexity and scales comic length from 1 to 8 panels.
-- Uses a fixed original cast for recurring comic continuity.
-- Generates panel art with Gemini image generation.
-- Overlays the exact script text in the browser for more reliable readability.
-- Saves rendered strips locally in browser storage.
-- Exports shareable PNG files.
+## What It Does
 
-## Setup
+- Accepts custom concepts or suggested topics.
+- Infers complexity and adjusts panel count automatically.
+- Generates a consistent recurring cast for continuity across explainers.
+- Produces panel artwork with Gemini image generation.
+- Overlays dialogue in the app for readability and layout control.
+- Saves explainers locally in the browser.
+- Exports a clean PNG in one click.
 
-1. Copy [.env.example](/Users/faisalshariff/Documents/New project/comic-app/.env.example) to `.env`.
-2. Add your Gemini API key to `GEMINI_API_KEY`.
-3. Start the app:
+## MVP Scope
+
+Current MVP includes:
+
+- Local-only usage
+- Browser-based save library
+- PNG export
+- Guide cast continuity
+- Speech-bubble and panel layout logic
+- Anatomy and continuity validation with regeneration retries
+
+## Tech Stack
+
+- Node.js server
+- Plain HTML, CSS, and JavaScript frontend
+- Gemini text + image APIs
+
+## Local Setup
+
+1. Go to the project folder:
+
+```bash
+cd '/Users/faisalshariff/Documents/New project/comic-app'
+```
+
+2. Copy the env template:
+
+```bash
+cp .env.example .env
+```
+
+3. Add your Gemini API key to `.env`:
+
+```bash
+GEMINI_API_KEY=your_key_here
+```
+
+4. Start the app:
 
 ```bash
 npm start
 ```
 
-4. Open `http://127.0.0.1:3000`.
+5. Open:
 
-Do not open [public/index.html](/Users/faisalshariff/Documents/New project/comic-app/public/index.html) directly with `file://`. The generation flow depends on the local server and browser security will block it.
+```text
+http://127.0.0.1:3000
+```
 
-## Notes
+## Important
+
+Do not open `public/index.html` directly with `file://`. The app must run through the local server.
+
+## Environment Notes
 
 - Default text model: `gemini-2.5-flash`
 - Default image model: `gemini-3.1-flash-image-preview`
-- Anatomy QA pass is enabled by default and can auto-regenerate panel images if duplicated limbs/body parts are detected.
-- Tuning knobs:
+- Validation retries can be tuned with:
   - `ENABLE_ANATOMY_VALIDATION=1|0`
   - `MAX_PANEL_IMAGE_ATTEMPTS=1..5`
-- Saved comics are local to the current browser only.
-- Because the API key was shared in chat, rotating it before real use is the safer choice.
+
+## Repo Contents
+
+- `server.js` - API server and generation pipeline
+- `public/index.html` - page structure
+- `public/styles.css` - visual design and layout
+- `public/app.js` - frontend interaction logic
+
+## Current Status
+
+This repo is set up and pushed on `main`. It is ready for continued iteration and deployment work.
