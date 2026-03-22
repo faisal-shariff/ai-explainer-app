@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concept Clarity</title>
+    <meta
+      name="description"
+      content="Concept Clarity turns hard AI concepts into clear, character-led visual briefs."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="halftone-overlay"></div>
+    <div class="page-shell">
+      <section id="runtime-banner" class="runtime-banner hidden">
+        <div>
+          <p class="card-label">App Status</p>
+          <h2 id="runtime-title">Connection status</h2>
+          <p id="runtime-message" class="runtime-message"></p>
+        </div>
+        <div class="runtime-actions">
+          <code class="runtime-command">cd comic-app && npm start</code>
+        </div>
+      </section>
+
+      <header class="hero-deck">
+        <section class="hero-cover">
+          <p class="eyebrow">Concept Clarity</p>
+          <h1>AI concepts that are clear, visual, and memorable.</h1>
+          <p class="hero-text">
+            Turn difficult AI ideas into clear visual briefs with a recurring cast and
+            clean, shareable visual summaries.
+          </p>
+
+          <div class="hero-ribbon">
+            <span id="session-stamp" class="signal-chip">Session live</span>
+            <span class="signal-chip">Understand faster</span>
+            <span class="signal-chip">Visual stories that stick</span>
+            <span class="signal-chip">Ready to save and share</span>
+          </div>
+
+          <div class="hero-spotlight">
+            <article class="spotlight-card warm">
+              <p class="spot-kicker">Why this works</p>
+              <h3>From confusion to clarity</h3>
+              <p>Start with what people assume, then show what is really happening.</p>
+            </article>
+            <article class="spotlight-card cool">
+              <p class="spot-kicker">Clear flow</p>
+              <h3>Step-by-step explanation</h3>
+              <p>Each panel adds one idea so the concept clicks naturally.</p>
+            </article>
+            <article class="spotlight-card neutral">
+              <p class="spot-kicker">Share instantly</p>
+              <h3>Use it anywhere</h3>
+              <p>Save every brief locally and export a clean PNG in one click.</p>
+            </article>
+          </div>
+        </section>
+
+        <aside class="command-dock">
+          <form id="generator-form" class="prompt-card">
+            <p class="card-label">Create Visual Brief</p>
+            <label class="prompt-label" for="concept-input">What do you want to understand?</label>
+
+            <div class="audience-group">
+              <span class="audience-label">Pick your audience</span>
+              <div id="audience-options" class="audience-options">
+                <button class="audience-chip active" type="button" data-audience="general">Anyone</button>
+                <button class="audience-chip" type="button" data-audience="student">Student</button>
+                <button class="audience-chip" type="button" data-audience="product manager">PM</button>
+                <button class="audience-chip" type="button" data-audience="founder">Founder</button>
+                <button class="audience-chip" type="button" data-audience="engineer">Engineer</button>
+              </div>
+            </div>
+
+            <div class="prompt-row">
+              <input
+                id="concept-input"
+                name="concept"
+                type="text"
+                maxlength="160"
+                placeholder="Try: retrieval augmented generation"
+                autocomplete="off"
+              />
+              <button id="generate-button" type="submit">Generate brief</button>
+            </div>
+            <p id="status-text" class="status-text">We pick the right depth and panel count automatically.</p>
+            <div id="suggestions" class="suggestions"></div>
+          </form>
+
+          <section class="team-photo-card">
+            <div class="team-photo-head">
+              <p class="card-label">Meet Your Guides</p>
+            </div>
+            <div class="team-photo-frame loading">
+              <img
+                id="team-photo-image"
+                class="team-photo-image"
+                alt="The recurring guide cast: Mira, Len, Dot, and Byte"
+                loading="lazy"
+              />
+              <div id="team-photo-fallback" class="team-photo-fallback">
+                <p>Team photo unavailable right now.</p>
+                <p>Select a guide below to see role details.</p>
+              </div>
+              <div id="cast-overlay" class="cast-overlay" aria-label="Team labels"></div>
+            </div>
+            <p class="team-photo-caption">Meet your team</p>
+            <div id="cast-selector" class="cast-selector" aria-label="Select a team member"></div>
+            <article id="cast-detail" class="cast-detail" aria-live="polite">
+              <h3 id="cast-detail-name"></h3>
+              <p id="cast-detail-description"></p>
+            </article>
+          </section>
+        </aside>
+      </header>
+
+      <main class="workspace">
+        <section class="result-section">
+          <div id="empty-state" class="empty-state">
+            <div class="empty-main">
+              <p class="card-label">What You Get</p>
+              <h2>Type one concept and get a clear visual explanation in minutes.</h2>
+              <p>
+                You get a concise summary, a visual walkthrough that teaches step by step, and a PNG you can
+                save or share instantly.
+              </p>
+            </div>
+            <div class="empty-grid">
+              <article class="empty-node">
+                <p class="node-index">1</p>
+                <h3>Start with the core idea</h3>
+                <p>See what it means, what people miss, and why it matters.</p>
+              </article>
+              <article class="empty-node">
+                <p class="node-index">2</p>
+                <h3>Learn through visuals</h3>
+                <p>Panels are ordered to build understanding, not just show random scenes.</p>
+              </article>
+              <article class="empty-node">
+                <p class="node-index">3</p>
+                <h3>Save and share</h3>
+                <p>Keep briefs in your library and export a clean PNG in one click.</p>
+              </article>
+            </div>
+          </div>
+
+          <article id="result-card" class="result-card hidden">
+            <div class="result-header">
+              <div>
+                <p id="comic-hook" class="card-label"></p>
+                <h2 id="comic-title"></h2>
+                <p id="comic-summary" class="result-summary"></p>
+              </div>
+              <div class="result-actions">
+                <button id="save-button" class="secondary-button" type="button">Save locally</button>
+                <button id="export-button" class="secondary-button" type="button">Export PNG</button>
+                <button id="share-button" class="secondary-button" type="button">Share</button>
+              </div>
+            </div>
+
+            <div class="meta-strip">
+              <span id="audience-badge" class="meta-pill"></span>
+              <span id="complexity-badge" class="meta-pill"></span>
+              <span id="panel-badge" class="meta-pill"></span>
+              <span id="caption-badge" class="meta-pill highlight-pill"></span>
+            </div>
+            <div id="learning-grid" class="learning-grid"></div>
+            <div id="takeaway-list" class="takeaway-list"></div>
+            <div id="comic-grid" class="comic-grid"></div>
+          </article>
+        </section>
+
+        <section class="saved-section">
+          <div class="saved-header">
+            <div>
+              <p class="card-label">Saved Briefs</p>
+              <h2>Your saved briefs</h2>
+            </div>
+            <p class="saved-note">Saved in this browser for now.</p>
+          </div>
+          <div id="saved-grid" class="saved-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="saved-card-template">
+      <article class="saved-card">
+        <div class="saved-media">
+          <img class="saved-image" alt="" />
+        </div>
+        <div class="saved-copy">
+          <p class="saved-date"></p>
+          <h3 class="saved-title"></h3>
+          <p class="saved-summary"></p>
+        </div>
+        <div class="saved-actions">
+          <button class="mini-button export-saved" type="button">PNG</button>
+          <button class="mini-button delete-saved" type="button">Delete</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
