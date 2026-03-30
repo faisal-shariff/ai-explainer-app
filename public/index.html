@@ -6,13 +6,27 @@
     <title>Concept Clarity</title>
     <meta
       name="description"
-      content="Concept Clarity turns hard AI concepts into clear, character-led visual briefs."
+      content="Concept Clarity turns hard AI concepts into clear, character-led visual explainers."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="halftone-overlay"></div>
     <div class="page-shell">
+      <header class="top-nav" id="home">
+        <a href="#home" class="top-nav-brand">
+          <span class="top-nav-dot" aria-hidden="true"></span>
+          Concept Clarity
+        </a>
+        <nav class="top-nav-links" aria-label="Primary">
+          <a href="#how-it-works" class="js-nav-link">How it works</a>
+          <a href="#generator-form" class="js-nav-link">Generate</a>
+          <a href="#saved-briefs" class="js-nav-link">Saved visuals</a>
+          <a href="#share-friend" class="js-nav-link">Share</a>
+        </nav>
+        <a href="#generator-form" class="top-nav-cta js-nav-link">Start creating</a>
+      </header>
+
       <section id="runtime-banner" class="runtime-banner hidden">
         <div>
           <p class="card-label">App Status</p>
@@ -24,17 +38,22 @@
         </div>
       </section>
 
+      <section class="beta-strip" aria-label="Experiment status">
+        <p>
+          Experimental, currently free to use.
+        </p>
+      </section>
+
       <header class="hero-deck">
         <section class="hero-cover">
           <p class="eyebrow">Concept Clarity</p>
           <h1>AI concepts that are clear, visual, and memorable.</h1>
           <p class="hero-text">
-            Turn difficult AI ideas into clear visual briefs with a recurring cast and
+            Turn difficult AI ideas into clear visual explainers with a recurring cast and
             clean, shareable visual summaries.
           </p>
 
           <div class="hero-ribbon">
-            <span id="session-stamp" class="signal-chip">Session live</span>
             <span class="signal-chip">Understand faster</span>
             <span class="signal-chip">Visual stories that stick</span>
             <span class="signal-chip">Ready to save and share</span>
@@ -54,15 +73,15 @@
             <article class="spotlight-card neutral">
               <p class="spot-kicker">Share instantly</p>
               <h3>Use it anywhere</h3>
-              <p>Save every brief locally and export a clean PNG in one click.</p>
+            <p>Save every visual locally and open it anytime in full-strip view.</p>
             </article>
           </div>
         </section>
 
         <aside class="command-dock">
           <form id="generator-form" class="prompt-card">
-            <p class="card-label">Create Visual Brief</p>
-            <label class="prompt-label" for="concept-input">What do you want to understand?</label>
+            <p class="card-label">Create Visual</p>
+            <label class="prompt-label" for="concept-input">Start here: what do you want to understand?</label>
 
             <div class="mode-group">
               <span class="mode-label">Explanation mode</span>
@@ -83,8 +102,9 @@
                 placeholder="Try: retrieval augmented generation"
                 autocomplete="off"
               />
-              <button id="generate-button" type="submit">Generate brief</button>
+              <button id="generate-button" type="submit">Generate</button>
             </div>
+            <p id="input-start-hint" class="input-start-hint">Type any AI concept in the field above to begin.</p>
             <p id="status-text" class="status-text">We tune depth and panel count from your explanation mode and concept complexity.</p>
             <div id="suggestions" class="suggestions"></div>
           </form>
@@ -117,14 +137,43 @@
       </header>
 
       <main class="workspace">
-        <section class="result-section">
+        <section class="result-section" id="how-it-works">
+          <article id="result-card" class="result-card hidden">
+            <div class="result-header">
+              <div>
+                <p id="comic-hook" class="card-label"></p>
+                <h2 id="comic-title"></h2>
+                <p id="comic-summary" class="result-summary"></p>
+              </div>
+              <div class="result-actions">
+                <button id="save-button" class="secondary-button" type="button">Save locally</button>
+                <button id="share-button" class="secondary-button" type="button">Share</button>
+              </div>
+            </div>
+
+            <div class="meta-strip">
+              <span id="mode-badge" class="meta-pill"></span>
+              <span id="complexity-badge" class="meta-pill"></span>
+              <span id="panel-badge" class="meta-pill"></span>
+              <span id="caption-badge" class="meta-pill highlight-pill"></span>
+            </div>
+            <div id="learning-grid" class="learning-grid"></div>
+            <div id="takeaway-list" class="takeaway-list"></div>
+            <div id="generated-carousel-controls" class="generated-carousel-controls hidden" aria-label="Generated panel navigation">
+              <button id="generated-carousel-prev" class="mini-button" type="button" aria-label="Previous generated panel">Prev</button>
+              <p id="generated-carousel-status" class="generated-carousel-status" aria-live="polite"></p>
+              <button id="generated-carousel-next" class="mini-button" type="button" aria-label="Next generated panel">Next</button>
+            </div>
+            <div id="comic-grid" class="comic-grid"></div>
+          </article>
+
           <div id="empty-state" class="empty-state">
             <div class="empty-main">
               <p class="card-label">What You Get</p>
               <h2>Type one concept and get a clear visual explanation in minutes.</h2>
               <p>
-                You get a concise summary, a visual walkthrough that teaches step by step, and a PNG you can
-                save or share instantly.
+                You get a concise summary, a visual walkthrough that teaches step by step, and visuals you can
+                save and share instantly.
               </p>
             </div>
             <div class="empty-grid">
@@ -141,48 +190,62 @@
               <article class="empty-node">
                 <p class="node-index">3</p>
                 <h3>Save and share</h3>
-                <p>Keep briefs in your library and export a clean PNG in one click.</p>
+                <p>Keep visuals in your library and open them anytime in a clean full-strip view.</p>
               </article>
             </div>
           </div>
 
-          <article id="result-card" class="result-card hidden">
-            <div class="result-header">
+          <section class="how-carousel-card" aria-label="How it works demo carousel">
+            <div class="how-carousel-head">
               <div>
-                <p id="comic-hook" class="card-label"></p>
-                <h2 id="comic-title"></h2>
-                <p id="comic-summary" class="result-summary"></p>
+                <p class="card-label">How it works</p>
+                <h3>Example: RAG Explained by Concept Clarity</h3>
               </div>
-              <div class="result-actions">
-                <button id="save-button" class="secondary-button" type="button">Save locally</button>
-                <button id="export-button" class="secondary-button" type="button">Export PNG</button>
-                <button id="share-button" class="secondary-button" type="button">Share</button>
+              <div class="how-carousel-actions">
+                <button id="how-carousel-prev" class="mini-button" type="button" aria-label="Previous panel">Prev</button>
+                <button id="how-carousel-next" class="mini-button" type="button" aria-label="Next panel">Next</button>
               </div>
             </div>
-
-            <div class="meta-strip">
-              <span id="mode-badge" class="meta-pill"></span>
-              <span id="complexity-badge" class="meta-pill"></span>
-              <span id="panel-badge" class="meta-pill"></span>
-              <span id="caption-badge" class="meta-pill highlight-pill"></span>
+            <div class="how-carousel-viewport">
+              <div id="how-carousel-track" class="how-carousel-track"></div>
             </div>
-            <div id="learning-grid" class="learning-grid"></div>
-            <div id="takeaway-list" class="takeaway-list"></div>
-            <div id="comic-grid" class="comic-grid"></div>
-          </article>
+            <div id="how-carousel-dialogue-list" class="how-carousel-dialogue-list"></div>
+            <p id="how-carousel-caption" class="how-carousel-caption">
+              Loading sample comic...
+            </p>
+          </section>
         </section>
 
-        <section class="saved-section">
+        <section class="saved-section" id="saved-briefs">
           <div class="saved-header">
             <div>
-              <p class="card-label">Saved Briefs</p>
-              <h2>Your saved briefs</h2>
+              <p class="card-label">Save Visuals</p>
+              <h2>Your Saved Visuals</h2>
             </div>
             <p class="saved-note">Saved in this browser for now.</p>
           </div>
           <div id="saved-grid" class="saved-grid"></div>
         </section>
       </main>
+
+      <footer class="site-footer" id="share-friend">
+        <div class="site-footer-grid">
+          <div>
+            <p class="card-label">About this experiment</p>
+            <h3>Built to test better ways to explain hard AI ideas visually.</h3>
+            <p>
+              The goal is practical understanding: concise explanations, consistent characters, and visuals you can revisit and share.
+            </p>
+          </div>
+          <div class="site-footer-cta-panel">
+            <p class="site-footer-cta-label">Spread the word</p>
+            <h3>Share this with a friend</h3>
+            <p>If this helped you understand an AI topic faster, pass it on.</p>
+            <button id="footer-share-cta" class="site-footer-cta" type="button">Share Concept Clarity</button>
+          </div>
+        </div>
+        <p class="site-footer-meta">Concept Clarity beta • Visual AI explainers • v0.1</p>
+      </footer>
     </div>
 
     <template id="saved-card-template">
@@ -196,11 +259,46 @@
           <p class="saved-summary"></p>
         </div>
         <div class="saved-actions">
-          <button class="mini-button export-saved" type="button">PNG</button>
+          <button class="mini-button view-saved" type="button">View</button>
           <button class="mini-button delete-saved" type="button">Delete</button>
         </div>
       </article>
     </template>
+
+    <div id="saved-modal" class="saved-modal hidden" role="dialog" aria-modal="true" aria-labelledby="saved-modal-title">
+      <button class="saved-modal-backdrop" type="button" data-close-saved-modal aria-label="Close saved visual"></button>
+      <article class="saved-modal-dialog">
+        <div class="saved-modal-header">
+          <div class="saved-modal-meta">
+            <p id="saved-modal-date" class="saved-modal-date"></p>
+            <h3 id="saved-modal-title"></h3>
+          </div>
+          <div class="saved-modal-actions">
+            <button id="saved-modal-prev" class="mini-button" type="button" aria-label="Previous panel">Prev</button>
+            <p id="saved-modal-panel-label" class="saved-modal-panel-label"></p>
+            <button id="saved-modal-next" class="mini-button" type="button" aria-label="Next panel">Next</button>
+            <button id="saved-modal-close" class="mini-button" type="button" aria-label="Close">Close</button>
+          </div>
+        </div>
+
+        <div id="saved-modal-viewer" class="saved-modal-viewer">
+          <div class="saved-modal-viewport">
+            <div id="saved-modal-track" class="saved-modal-track"></div>
+          </div>
+          <div id="saved-modal-dialogue" class="saved-modal-dialogue-list"></div>
+          <p id="saved-modal-caption" class="saved-modal-caption"></p>
+        </div>
+
+        <div id="saved-modal-legacy" class="saved-modal-legacy hidden">
+          <p class="saved-modal-legacy-note">
+            This saved visual uses the previous format. Save it again to use panel-by-panel view.
+          </p>
+          <div class="saved-modal-media">
+            <img id="saved-modal-image" alt="" />
+          </div>
+        </div>
+      </article>
+    </div>
 
     <script src="./app.js"></script>
   </body>

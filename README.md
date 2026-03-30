@@ -69,7 +69,7 @@ Do not open `public/index.html` directly with `file://`. The app must run throug
 
 ## Environment Notes
 
-- Default text model: `gemini-2.5-flash`
+- Default text model: `gemini-3.1-pro`
 - Default image model: `gemini-3.1-flash-image-preview`
 - Validation retries can be tuned with:
   - `ENABLE_ANATOMY_VALIDATION=1|0`

@@ -1,0 +1,89 @@
+{
+  "sourceLabel": "Preloaded sample strip",
+  "title": "RAG: Getting Your LLM to Read the Manual",
+  "concept": "retrieval augmented generation",
+  "explanationMode": "clear",
+  "generatedAt": "2026-03-25T14:09:10.065Z",
+  "slides": [
+    {
+      "panelNumber": 1,
+      "imageUrl": "./examples/rag-sample/panel-1.jpg",
+      "caption": "LLMs aren't internet browsers.",
+      "purpose": "misunderstanding",
+      "dialogue": [
+        {
+          "speaker": "Len",
+          "line": "So, our new LLM knows everything, right?"
+        },
+        {
+          "speaker": "Mira",
+          "line": "LLMs generate from patterns in their vast training data, not by browsing the live internet."
+        }
+      ]
+    },
+    {
+      "panelNumber": 2,
+      "imageUrl": "./examples/rag-sample/panel-2.jpg",
+      "caption": "Outdated info or made-up facts.",
+      "purpose": "failure",
+      "dialogue": [
+        {
+          "speaker": "Len",
+          "line": "But it can tell me today's stock market news, instantly?"
+        },
+        {
+          "speaker": "Mira",
+          "line": "Without current data, it might generate plausible but incorrect or outdated information."
+        }
+      ]
+    },
+    {
+      "panelNumber": 3,
+      "imageUrl": "./examples/rag-sample/panel-3.jpg",
+      "caption": "Enhancing LLMs with facts.",
+      "purpose": "reframing",
+      "dialogue": [
+        {
+          "speaker": "Dot",
+          "line": "How do we get accurate, current answers from it then?"
+        },
+        {
+          "speaker": "Mira",
+          "line": "We use Retrieval Augmented Generation, which retrieves relevant facts *before* the LLM responds."
+        }
+      ]
+    },
+    {
+      "panelNumber": 4,
+      "imageUrl": "./examples/rag-sample/panel-4.jpg",
+      "caption": "Retrieve, then generate.",
+      "purpose": "mechanism",
+      "dialogue": [
+        {
+          "speaker": "Len",
+          "line": "So, it just... magically finds the right info?"
+        },
+        {
+          "speaker": "Mira",
+          "line": "It first queries an external knowledge base to gather context, then passes that to the LLM."
+        }
+      ]
+    },
+    {
+      "panelNumber": 5,
+      "imageUrl": "./examples/rag-sample/panel-5.jpg",
+      "caption": "Accurate, verifiable AI answers.",
+      "purpose": "takeaway",
+      "dialogue": [
+        {
+          "speaker": "Dot",
+          "line": "So, our internal policy bot could use this?"
+        },
+        {
+          "speaker": "Mira",
+          "line": "Exactly. RAG ensures the bot gives precise, verifiable answers based on official documents."
+        }
+      ]
+    }
+  ]
+}

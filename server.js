@@ -12,7 +12,7 @@ const env = loadEnv(path.join(__dirname, ".env"));
 const PORT = Number(env.PORT || 3000);
 const HOST = env.HOST || "127.0.0.1";
 const GEMINI_API_KEY = env.GEMINI_API_KEY || "";
-const TEXT_MODEL = env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+const TEXT_MODEL = env.GEMINI_TEXT_MODEL || "gemini-3.1-pro";
 const IMAGE_MODEL = env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image-preview";
 const ENABLE_ANATOMY_VALIDATION = env.ENABLE_ANATOMY_VALIDATION !== "0";
 const ENABLE_CONTINUITY_VALIDATION = env.ENABLE_CONTINUITY_VALIDATION !== "0";
