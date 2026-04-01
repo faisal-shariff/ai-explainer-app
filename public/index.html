@@ -257,6 +257,10 @@
           <p class="saved-date"></p>
           <h3 class="saved-title"></h3>
           <p class="saved-summary"></p>
+          <div class="saved-card-meta">
+            <span class="saved-chip saved-chip-panels"></span>
+            <span class="saved-chip saved-chip-mode"></span>
+          </div>
         </div>
         <div class="saved-actions">
           <button class="mini-button view-saved" type="button">View</button>
@@ -282,9 +286,10 @@
         </div>
 
         <div id="saved-modal-viewer" class="saved-modal-viewer">
-          <div class="saved-modal-viewport">
+          <div class="saved-modal-viewport" id="saved-modal-viewport">
             <div id="saved-modal-track" class="saved-modal-track"></div>
           </div>
+          <div id="saved-modal-thumbs" class="saved-modal-thumbs" aria-label="Jump to panel"></div>
           <div id="saved-modal-dialogue" class="saved-modal-dialogue-list"></div>
           <p id="saved-modal-caption" class="saved-modal-caption"></p>
         </div>

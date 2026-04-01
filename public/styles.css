@@ -511,6 +511,20 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.status-text.status-info {
+  color: var(--muted);
+}
+
+.status-text.status-success {
+  color: #1a8068;
+  font-weight: 700;
+}
+
+.status-text.status-error {
+  color: #ac3131;
+  font-weight: 700;
+}
+
 .suggestions {
   margin-top: 12px;
   display: flex;
@@ -1321,6 +1335,11 @@ button:disabled {
   background: rgba(255, 255, 255, 0.11);
 }
 
+.saved-card:focus-within {
+  border-color: rgba(141, 225, 209, 0.58);
+  box-shadow: 0 0 0 1px rgba(141, 225, 209, 0.26);
+}
+
 .saved-media {
   aspect-ratio: 16 / 9;
   min-height: 0;
@@ -1374,6 +1393,32 @@ button:disabled {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.saved-card-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.saved-chip {
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(13, 29, 48, 0.5);
+  color: #e6eef8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  display: inline-flex;
+  align-items: center;
+}
+
+.saved-chip-mode {
+  color: #a2e8dc;
+  border-color: rgba(162, 232, 220, 0.34);
 }
 
 .saved-actions {
@@ -1511,6 +1556,55 @@ button:disabled {
   display: flex;
   transition: transform 320ms ease;
   will-change: transform;
+}
+
+.saved-modal-thumbs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(172, 197, 227, 0.6) rgba(255, 255, 255, 0.08);
+}
+
+.saved-modal-thumb {
+  width: 64px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid rgba(170, 191, 217, 0.45);
+  background: rgba(14, 29, 49, 0.68);
+  padding: 0;
+  overflow: hidden;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.saved-modal-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0.86;
+}
+
+.saved-modal-thumb:hover {
+  transform: translateY(-1px);
+  border-color: rgba(141, 225, 209, 0.76);
+}
+
+.saved-modal-thumb:focus-visible {
+  outline: 2px solid rgba(141, 225, 209, 0.92);
+  outline-offset: 1px;
+}
+
+.saved-modal-thumb.active {
+  border-color: rgba(141, 225, 209, 0.94);
+  box-shadow: 0 0 0 1px rgba(141, 225, 209, 0.42);
+}
+
+.saved-modal-thumb.active img {
+  opacity: 1;
 }
 
 .saved-modal-slide {
@@ -1917,6 +2011,16 @@ body.modal-open {
     width: 100%;
     justify-content: flex-end;
     gap: 6px;
+  }
+
+  .saved-modal-thumbs {
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+
+  .saved-modal-thumb {
+    width: 56px;
+    height: 40px;
   }
 
   .saved-modal-panel-label {

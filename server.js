@@ -12,8 +12,20 @@ const env = loadEnv(path.join(__dirname, ".env"));
 const PORT = Number(env.PORT || 3000);
 const HOST = env.HOST || "127.0.0.1";
 const GEMINI_API_KEY = env.GEMINI_API_KEY || "";
-const TEXT_MODEL = env.GEMINI_TEXT_MODEL || "gemini-3.1-pro";
-const IMAGE_MODEL = env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image-preview";
+const TEXT_MODEL_CANDIDATES = uniqueModels(
+  env.GEMINI_TEXT_MODEL,
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-1.5-pro"
+);
+const IMAGE_MODEL_CANDIDATES = uniqueModels(
+  env.GEMINI_IMAGE_MODEL,
+  "gemini-2.0-flash-preview-image-generation",
+  "gemini-2.0-flash-exp-image-generation",
+  "gemini-2.5-flash-image-preview"
+);
+const TEXT_MODEL = TEXT_MODEL_CANDIDATES[0];
+const IMAGE_MODEL = IMAGE_MODEL_CANDIDATES[0];
 const ENABLE_ANATOMY_VALIDATION = env.ENABLE_ANATOMY_VALIDATION !== "0";
 const ENABLE_CONTINUITY_VALIDATION = env.ENABLE_CONTINUITY_VALIDATION !== "0";
 const MAX_PANEL_IMAGE_ATTEMPTS = clamp(Number(env.MAX_PANEL_IMAGE_ATTEMPTS) || 4, 1, 6);
@@ -100,6 +112,8 @@ let castPhotoCache = null;
 let castPhotoLastError = "";
 let castReferenceCache = null;
 let castReferenceLastError = "";
+let activeTextModel = TEXT_MODEL;
+let activeImageModel = IMAGE_MODEL;
 
 const server = createServer(async (req, res) => {
   try {
@@ -109,8 +123,8 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, {
         ok: true,
         hasApiKey: Boolean(GEMINI_API_KEY),
-        textModel: TEXT_MODEL,
-        imageModel: IMAGE_MODEL
+        textModel: activeTextModel,
+        imageModel: activeImageModel
       });
       return;
     }
@@ -176,22 +190,43 @@ async function buildComic(concept, explanationMode) {
   const castReference = await getCanonicalCastReference();
   const castReferenceImageDataUrl = castReference.imageDataUrl;
   const panels = [];
+  const fallbackPanels = [];
 
   for (let index = 0; index < script.panels.length; index += 1) {
     const panel = script.panels[index];
-    const imageDataUrl = await generatePanelImageWithValidation(script, panel, index, {
+    const panelGeneration = await generatePanelImageWithValidation(script, panel, index, {
       castReferenceImageDataUrl,
       previousPanelImageDataUrl: panels[index - 1]?.imageDataUrl || ""
     });
+
+    if (panelGeneration.meta.usedFallback) {
+      fallbackPanels.push({
+        panelNumber: panel.panelNumber || index + 1,
+        attempts: panelGeneration.meta.attempts,
+        failureTypes: panelGeneration.meta.failureTypes,
+        reason: panelGeneration.meta.reason
+      });
+    }
+
     panels.push({
       ...panel,
-      imageDataUrl
+      imageDataUrl: panelGeneration.imageDataUrl,
+      generation: panelGeneration.meta
     });
   }
+
+  const fallbackCount = fallbackPanels.length;
 
   return {
     ...script,
     panels,
+    generationSummary: {
+      fallbackPanelCount: fallbackCount,
+      fallbackPanels,
+      message: fallbackCount
+        ? `${fallbackCount} panel${fallbackCount === 1 ? "" : "s"} used reliability fallback output after retries.`
+        : ""
+    },
     characterRoster: CHARACTER_ROSTER,
     castReferenceImageDataUrl,
     concept,
@@ -366,14 +401,11 @@ async function generateComicScript(concept, explanationMode) {
     "- Ensure the final panel lands on understanding, not on a punchline."
   ].join("\n");
 
-  const response = await callGemini({
-    model: TEXT_MODEL,
-    body: {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.7
-      }
+  const response = await callGeminiText({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.7
     }
   });
 
@@ -399,15 +431,12 @@ async function generateCanonicalCastReferenceImage() {
     ...CHARACTER_ROSTER.map((character) => `- ${character.name}: ${character.look}; personality hint: ${character.personality}`)
   ].join("\n");
 
-  const response = await callGemini({
-    model: IMAGE_MODEL,
-    body: {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        imageConfig: {
-          aspectRatio: "16:9",
-          imageSize: "1K"
-        }
+  const response = await callGeminiImage({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: "16:9",
+        imageSize: "1K"
       }
     }
   });
@@ -438,15 +467,12 @@ async function generateCastGroupPhoto({ castReferenceImageDataUrl = "" } = {}) {
     parts.push({ inlineData: dataUrlToInlineData(castReferenceImageDataUrl) });
   }
 
-  const response = await callGemini({
-    model: IMAGE_MODEL,
-    body: {
-      contents: [{ parts }],
-      generationConfig: {
-        imageConfig: {
-          aspectRatio: CAST_PHOTO_ASPECT_RATIO,
-          imageSize: CAST_PHOTO_SIZE
-        }
+  const response = await callGeminiImage({
+    contents: [{ parts }],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: CAST_PHOTO_ASPECT_RATIO,
+        imageSize: CAST_PHOTO_SIZE
       }
     }
   });
@@ -463,6 +489,10 @@ async function generatePanelImage(script, panel, index, references) {
   const visibleCharacters = panel.characters
     .map((name) => CHARACTER_ROSTER.find((character) => character.name === name))
     .filter(Boolean);
+  const expectedCharacterCount = Array.isArray(panel.characters)
+    ? panel.characters.filter(Boolean).length
+    : 0;
+  const isStrictRetry = Number(references?.retryContext?.attempt || 1) > 1;
 
   const prompt = [
     "Create a single comic panel illustration in an ORIGINAL flat-color office satire style.",
@@ -512,8 +542,28 @@ async function generatePanelImage(script, panel, index, references) {
     references?.correctionNotes
       ? `Critical fixes from previous attempt: ${references.correctionNotes}. Apply these fixes before returning image.`
       : "No prior anatomy or continuity corrections provided.",
+    isStrictRetry
+      ? `STRICT RETRY MODE (attempt ${references.retryContext.attempt} of ${references.retryContext.maxAttempts}): previous failure type ${references.retryContext.failureType}.`
+      : "",
+    isStrictRetry && expectedCharacterCount > 0
+      ? `Render exactly ${expectedCharacterCount} characters in frame and no extra people or background silhouettes.`
+      : "",
+    isStrictRetry
+      ? "Do not add extra limbs, duplicated body parts, or duplicate characters under any circumstances."
+      : "",
+    isStrictRetry
+      ? "For each human: one head, one torso, exactly two arms, two hands, two legs, and two feet."
+      : "",
+    isStrictRetry
+      ? "Preserve canonical character appearance and continuity: same face shape, hairstyle, clothing colors, and accessories."
+      : "",
+    isStrictRetry
+      ? "Preserve continuity with previous panel and cast reference; no redesigns, swaps, or extra people."
+      : "",
     "Frame the composition so it reads clearly as a standalone comic panel."
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const parts = [{ text: prompt }];
   if (references?.castReferenceImageDataUrl) {
@@ -526,15 +576,12 @@ async function generatePanelImage(script, panel, index, references) {
     parts.push({ inlineData: dataUrlToInlineData(references.previousAttemptImageDataUrl) });
   }
 
-  const response = await callGemini({
-    model: IMAGE_MODEL,
-    body: {
-      contents: [{ parts }],
-      generationConfig: {
-        imageConfig: {
-          aspectRatio: "4:3",
-          imageSize: "1K"
-        }
+  const response = await callGeminiImage({
+    contents: [{ parts }],
+    generationConfig: {
+      imageConfig: {
+        aspectRatio: "4:3",
+        imageSize: "1K"
       }
     }
   });
@@ -549,24 +596,61 @@ async function generatePanelImage(script, panel, index, references) {
 }
 
 async function generatePanelImageWithValidation(script, panel, index, references) {
-  let lastImageDataUrl = "";
+  let bestEffortImageDataUrl = "";
   let previousAttemptImageDataUrl = "";
   let correctionNotes = "";
+  let lastFailureType = "render";
+  let lastFailureReason = "";
+  const failureTypes = new Set();
+  const failureNotes = [];
   let lastAudit = {
     anatomy: { pass: true, issues: [] },
     continuity: { pass: true, issues: [] }
   };
 
+  // Retry only this panel; never restart the full strip when one panel fails validation.
   for (let attempt = 1; attempt <= MAX_PANEL_IMAGE_ATTEMPTS; attempt += 1) {
-    const imageDataUrl = await generatePanelImage(script, panel, index, {
-      ...references,
-      correctionNotes,
-      previousAttemptImageDataUrl
-    });
-    lastImageDataUrl = imageDataUrl;
+    let imageDataUrl = "";
+    try {
+      imageDataUrl = await generatePanelImage(script, panel, index, {
+        ...references,
+        correctionNotes,
+        previousAttemptImageDataUrl,
+        retryContext: {
+          attempt,
+          maxAttempts: MAX_PANEL_IMAGE_ATTEMPTS,
+          failureType: lastFailureType
+        }
+      });
+      bestEffortImageDataUrl = imageDataUrl;
+    } catch (error) {
+      failureTypes.add("render");
+      lastFailureType = "render";
+      lastFailureReason = normalizeText(
+        error?.message,
+        `Panel ${index + 1} image generation request failed.`
+      );
+      failureNotes.push(`render: ${lastFailureReason}`);
+      correctionNotes = buildRetryCorrectionNotes(
+        panel,
+        index,
+        attempt,
+        MAX_PANEL_IMAGE_ATTEMPTS,
+        failureNotes
+      );
+      continue;
+    }
 
     if (!ENABLE_ANATOMY_VALIDATION && !ENABLE_CONTINUITY_VALIDATION) {
-      return imageDataUrl;
+      return {
+        imageDataUrl,
+        meta: {
+          attempts: attempt,
+          usedFallback: false,
+          failureTypes: [],
+          reason: ""
+        }
+      };
     }
 
     const anatomyAudit = ENABLE_ANATOMY_VALIDATION
@@ -582,59 +666,217 @@ async function generatePanelImageWithValidation(script, panel, index, references
     };
 
     if (anatomyAudit.pass && continuityAudit.pass) {
-      return imageDataUrl;
+      return {
+        imageDataUrl,
+        meta: {
+          attempts: attempt,
+          usedFallback: false,
+          failureTypes: [],
+          reason: ""
+        }
+      };
     }
 
     const issueNotes = [];
     if (!anatomyAudit.pass) {
+      failureTypes.add("anatomy");
       issueNotes.push(...anatomyAudit.issues.map((issue) => `anatomy: ${issue}`));
     }
     if (!continuityAudit.pass) {
+      failureTypes.add("continuity");
       issueNotes.push(...continuityAudit.issues.map((issue) => `continuity: ${issue}`));
     }
 
-    correctionNotes = [
-      ...issueNotes,
-      "Exactly two arms and two legs per human.",
-      "No overlapping silhouettes that can imply extra limbs.",
-      "Keep body parts clearly attached to the correct person.",
-      "Match canonical character faces, hair, outfits, and accessories exactly."
-    ].join("; ");
+    lastFailureType = classifyFailureType(anatomyAudit, continuityAudit);
+    lastFailureReason = issueNotes[0] || "Validation mismatch";
+    failureNotes.push(...issueNotes);
+    correctionNotes = buildRetryCorrectionNotes(
+      panel,
+      index,
+      attempt,
+      MAX_PANEL_IMAGE_ATTEMPTS,
+      failureNotes
+    );
     previousAttemptImageDataUrl = imageDataUrl;
   }
 
   const lastIssues = [
     ...lastAudit.anatomy.issues.map((issue) => `anatomy: ${issue}`),
     ...lastAudit.continuity.issues.map((issue) => `continuity: ${issue}`)
-  ].join("; ");
-  throw createHttpError(
-    502,
-    `Could not produce a valid panel ${index + 1}. ${lastIssues}`
-  );
-}
+  ]
+    .filter(Boolean)
+    .join("; ");
 
-async function callGemini({ model, body }) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY
-      },
-      body: JSON.stringify(body)
-    }
-  );
-
-  if (!response.ok) {
-    const details = await response.text();
-    throw createHttpError(
-      response.status,
-      `Gemini request failed (${response.status}): ${details.slice(0, 400)}`
-    );
+  const reason = lastFailureReason || lastIssues || `Panel ${index + 1} failed validation after retries.`;
+  // If we have any rendered image, keep the best effort so the explainer can still complete.
+  if (bestEffortImageDataUrl) {
+    return {
+      imageDataUrl: bestEffortImageDataUrl,
+      meta: {
+        attempts: MAX_PANEL_IMAGE_ATTEMPTS,
+        usedFallback: true,
+        failureTypes: [...failureTypes],
+        reason
+      }
+    };
   }
 
-  return response.json();
+  return {
+    imageDataUrl: buildPanelFallbackSvgDataUrl(panel, index, reason),
+    meta: {
+      attempts: MAX_PANEL_IMAGE_ATTEMPTS,
+      usedFallback: true,
+      failureTypes: [...failureTypes, "render"],
+      reason
+    }
+  };
+}
+
+function classifyFailureType(anatomyAudit, continuityAudit) {
+  if (!anatomyAudit.pass && !continuityAudit.pass) {
+    return "anatomy+continuity";
+  }
+  if (!anatomyAudit.pass) {
+    return "anatomy";
+  }
+  if (!continuityAudit.pass) {
+    return "continuity";
+  }
+  return "render";
+}
+
+function buildRetryCorrectionNotes(panel, index, attempt, maxAttempts, failureNotes) {
+  const expectedCharacterCount = Array.isArray(panel?.characters)
+    ? panel.characters.filter(Boolean).length
+    : 0;
+  const recentNotes = failureNotes.slice(-6);
+
+  return [
+    `Retry panel ${index + 1}, attempt ${attempt} of ${maxAttempts}.`,
+    recentNotes.length ? `Recent failures: ${recentNotes.join("; ")}` : "",
+    expectedCharacterCount > 0
+      ? `Render exactly ${expectedCharacterCount} named characters and no extra people.`
+      : "Do not introduce background people or extra silhouettes.",
+    "No extra limbs.",
+    "No duplicated body parts.",
+    "No extra people.",
+    "Every human must have one head, one torso, two arms, two hands, two legs, and two feet.",
+    "Preserve canonical character appearance from cast reference.",
+    "Preserve clothing and accessory continuity from previous panel."
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildPanelFallbackSvgDataUrl(panel, index, reason) {
+  const escapedCaption = escapeSvgText(normalizeText(panel?.caption, "Recovered panel"));
+  const escapedReason = escapeSvgText(normalizeText(reason, "Panel recovery fallback"));
+  const escapedIndex = escapeSvgText(`Panel ${index + 1}`);
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f9f3e8"/>
+      <stop offset="100%" stop-color="#eef4f7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <rect x="74" y="70" width="1052" height="760" rx="26" fill="#ffffff" stroke="#d7e2ec" stroke-width="4"/>
+  <text x="120" y="170" font-family="Arial, sans-serif" font-size="46" font-weight="700" fill="#173452">${escapedIndex}</text>
+  <text x="120" y="248" font-family="Arial, sans-serif" font-size="36" fill="#1f3c5a">${escapedCaption}</text>
+  <text x="120" y="318" font-family="Arial, sans-serif" font-size="24" fill="#4a5f76">Recovered fallback visual used to keep the explainer complete.</text>
+  <text x="120" y="380" font-family="Arial, sans-serif" font-size="21" fill="#6b7f94">${escapedReason}</text>
+  <rect x="120" y="430" width="960" height="320" rx="18" fill="#f4f8fc" stroke="#d5e1ed" stroke-width="3"/>
+  <text x="600" y="595" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" fill="#2a4664">Panel regenerated with reliability fallback</text>
+</svg>`;
+
+  const encoded = Buffer.from(svg.replace(/\n+/g, "").trim()).toString("base64");
+  return `data:image/svg+xml;base64,${encoded}`;
+}
+
+function escapeSvgText(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function callGeminiText(body) {
+  const { model, json } = await callGeminiWithFallback({
+    model: activeTextModel,
+    fallbackModels: TEXT_MODEL_CANDIDATES,
+    body
+  });
+  activeTextModel = model;
+  return json;
+}
+
+async function callGeminiImage(body) {
+  const { model, json } = await callGeminiWithFallback({
+    model: activeImageModel,
+    fallbackModels: IMAGE_MODEL_CANDIDATES,
+    body
+  });
+  activeImageModel = model;
+  return json;
+}
+
+async function callGeminiWithFallback({ model, fallbackModels, body }) {
+  const candidates = uniqueModels(model, ...(Array.isArray(fallbackModels) ? fallbackModels : []));
+  let lastFailure = null;
+
+  for (const candidate of candidates) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${candidate}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY
+        },
+        body: JSON.stringify(body)
+      }
+    );
+
+    if (response.ok) {
+      return {
+        model: candidate,
+        json: await response.json()
+      };
+    }
+
+    const details = await response.text();
+    const compactDetails = details.slice(0, 400);
+    if (!isUnavailableModelError(response.status, compactDetails)) {
+      throw createHttpError(
+        response.status,
+        `Gemini request failed (${response.status}) on model ${candidate}: ${compactDetails}`
+      );
+    }
+
+    lastFailure = { status: response.status, model: candidate, details: compactDetails };
+  }
+
+  const summary = lastFailure
+    ? `Last tried model ${lastFailure.model} (${lastFailure.status}): ${lastFailure.details}`
+    : "No candidate models available.";
+  throw createHttpError(502, `Gemini model fallback exhausted. ${summary}`);
+}
+
+function isUnavailableModelError(status, details = "") {
+  if (status !== 404 && status !== 400) {
+    return false;
+  }
+
+  const text = String(details).toLowerCase();
+  return (
+    text.includes("not found") ||
+    text.includes("not supported") ||
+    text.includes("available models") ||
+    (text.includes("model") && text.includes("invalid"))
+  );
 }
 
 function normalizeComic(raw, concept, explanationMode) {
@@ -1001,6 +1243,22 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function uniqueModels(...values) {
+  const seen = new Set();
+  const out = [];
+
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+
+  return out;
+}
+
 function getTextResponse(response) {
   const parts = response?.candidates?.[0]?.content?.parts || [];
   const text = parts
@@ -1090,21 +1348,18 @@ async function auditPanelAnatomy(imageDataUrl, panel, script, index) {
       'Return JSON only: {"pass": true|false, "issues": ["short issue", "..."]}.'
     ].join("\n");
 
-    const response = await callGemini({
-      model: TEXT_MODEL,
-      body: {
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              { inlineData: dataUrlToInlineData(imageDataUrl) }
-            ]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.1
+    const response = await callGeminiText({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            { inlineData: dataUrlToInlineData(imageDataUrl) }
+          ]
         }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1
       }
     });
 
@@ -1150,14 +1405,11 @@ async function auditPanelContinuity(imageDataUrl, panel, script, index, referenc
       parts.push({ inlineData: dataUrlToInlineData(references.previousPanelImageDataUrl) });
     }
 
-    const response = await callGemini({
-      model: TEXT_MODEL,
-      body: {
-        contents: [{ parts }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.1
-        }
+    const response = await callGeminiText({
+      contents: [{ parts }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1
       }
     });
 

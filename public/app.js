@@ -151,6 +151,8 @@ const savedModalPanelLabel = document.querySelector("#saved-modal-panel-label");
 const savedModalTitle = document.querySelector("#saved-modal-title");
 const savedModalDate = document.querySelector("#saved-modal-date");
 const savedModalTrack = document.querySelector("#saved-modal-track");
+const savedModalViewport = document.querySelector("#saved-modal-viewport");
+const savedModalThumbs = document.querySelector("#saved-modal-thumbs");
 const savedModalDialogue = document.querySelector("#saved-modal-dialogue");
 const savedModalCaption = document.querySelector("#saved-modal-caption");
 const savedModalViewer = document.querySelector("#saved-modal-viewer");
@@ -169,6 +171,8 @@ let generatedCarouselScrollRaf = null;
 let generatorCueTimer = null;
 let savedModalSlides = [];
 let savedModalIndex = 0;
+let savedModalTouchStartX = 0;
+let savedModalTouchActive = false;
 
 if (queryConcept) {
   input.value = queryConcept;
@@ -218,6 +222,47 @@ document.addEventListener("keydown", (event) => {
     moveSavedModalCarousel(-1);
   } else if (event.key === "ArrowRight") {
     moveSavedModalCarousel(1);
+  } else if (event.key === "Home") {
+    setSavedModalIndex(0);
+  } else if (event.key === "End") {
+    setSavedModalIndex(savedModalSlides.length - 1);
+  }
+});
+
+savedModalViewport?.addEventListener("touchstart", (event) => {
+  if (!savedModalSlides.length || !savedModal || savedModal.classList.contains("hidden")) {
+    return;
+  }
+
+  const touch = event.changedTouches?.[0];
+  if (!touch) {
+    return;
+  }
+
+  savedModalTouchStartX = touch.clientX;
+  savedModalTouchActive = true;
+});
+
+savedModalViewport?.addEventListener("touchend", (event) => {
+  if (!savedModalTouchActive || !savedModalSlides.length) {
+    return;
+  }
+
+  const touch = event.changedTouches?.[0];
+  savedModalTouchActive = false;
+  if (!touch) {
+    return;
+  }
+
+  const deltaX = touch.clientX - savedModalTouchStartX;
+  if (Math.abs(deltaX) < 40) {
+    return;
+  }
+
+  if (deltaX > 0) {
+    moveSavedModalCarousel(-1);
+  } else {
+    moveSavedModalCarousel(1);
   }
 });
 
@@ -255,9 +300,9 @@ async function handleGenerate(event) {
     currentComic = data.comic;
     renderComic(currentComic);
     resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    setStatus("Visual generated. Save it locally or share it.");
+    setStatus("Visual generated. Save it locally or share it.", "success");
   } catch (error) {
-    setStatus(error.message || "Could not generate the visual.");
+    setStatus(error.message || "Could not generate the visual.", "error");
   } finally {
     setBusy(false);
   }
@@ -1042,14 +1087,20 @@ function renderSavedComics() {
     const savedDate = node.querySelector(".saved-date");
     const savedTitle = node.querySelector(".saved-title");
     const savedSummary = node.querySelector(".saved-summary");
+    const panelChip = node.querySelector(".saved-chip-panels");
+    const modeChip = node.querySelector(".saved-chip-mode");
     const viewButton = node.querySelector(".view-saved");
     const media = node.querySelector(".saved-media");
 
     savedImage.src = comic.previewDataUrl;
     savedImage.alt = comic.title;
+    savedImage.loading = "lazy";
+    savedImage.decoding = "async";
     savedDate.textContent = new Date(comic.createdAt).toLocaleString();
     savedTitle.textContent = comic.title;
     savedSummary.textContent = comic.summary;
+    panelChip.textContent = Number.isFinite(comic.panelCount) ? `${comic.panelCount} panels` : "Saved visual";
+    modeChip.textContent = formatSavedModeLabel(comic);
 
     viewButton.addEventListener("click", () => {
       openSavedModal(comic);
@@ -1141,6 +1192,9 @@ function closeSavedModal() {
   document.body.classList.remove("modal-open");
   savedModalSlides = [];
   savedModalIndex = 0;
+  if (savedModalThumbs) {
+    savedModalThumbs.innerHTML = "";
+  }
 }
 
 function getSavedModalSlides(comic) {
@@ -1171,6 +1225,9 @@ function renderSavedModalSlides() {
   }
 
   savedModalTrack.innerHTML = "";
+  if (savedModalThumbs) {
+    savedModalThumbs.innerHTML = "";
+  }
   savedModalSlides.forEach((slide, index) => {
     const panel = document.createElement("article");
     panel.className = "saved-modal-slide";
@@ -1187,6 +1244,26 @@ function renderSavedModalSlides() {
 
     panel.append(image, meta);
     savedModalTrack.appendChild(panel);
+
+    if (savedModalThumbs) {
+      const thumb = document.createElement("button");
+      thumb.className = "saved-modal-thumb";
+      thumb.type = "button";
+      thumb.setAttribute("aria-label", `Jump to panel ${index + 1}`);
+
+      const thumbImage = document.createElement("img");
+      thumbImage.src = slide.imageDataUrl;
+      thumbImage.alt = "";
+      thumbImage.loading = "lazy";
+      thumbImage.decoding = "async";
+
+      thumb.appendChild(thumbImage);
+      thumb.addEventListener("click", () => {
+        setSavedModalIndex(index);
+      });
+
+      savedModalThumbs.appendChild(thumb);
+    }
   });
 }
 
@@ -1213,6 +1290,18 @@ function updateSavedModalPosition() {
     savedModalNext.disabled = savedModalIndex >= savedModalSlides.length - 1;
   }
 
+  if (savedModalThumbs) {
+    const thumbs = savedModalThumbs.querySelectorAll(".saved-modal-thumb");
+    thumbs.forEach((thumb, index) => {
+      const isCurrent = index === savedModalIndex;
+      thumb.classList.toggle("active", isCurrent);
+      thumb.setAttribute("aria-current", isCurrent ? "true" : "false");
+      if (isCurrent) {
+        thumb.scrollIntoView({ block: "nearest", inline: "center" });
+      }
+    });
+  }
+
   renderSavedModalDialogue(current);
 }
 
@@ -1224,13 +1313,29 @@ function renderSavedModalDialogue(slide) {
   savedModalDialogue.innerHTML = "";
   const lines = Array.isArray(slide?.dialogue) ? slide.dialogue.slice(0, 3) : [];
 
+  if (!lines.length) {
+    const empty = document.createElement("article");
+    empty.className = "saved-modal-dialogue-row";
+    const text = document.createElement("p");
+    text.textContent = "No dialogue captured for this panel.";
+    empty.appendChild(text);
+    savedModalDialogue.appendChild(empty);
+    return;
+  }
+
   lines.forEach((line) => {
     const row = document.createElement("article");
     row.className = "saved-modal-dialogue-row";
-    row.innerHTML = `
-      <span class="speaker-tag speaker-${String(line.speaker || "mira").toLowerCase()}">${line.speaker || "Guide"}</span>
-      <p>${line.line || ""}</p>
-    `;
+
+    const speaker = document.createElement("span");
+    const normalizedSpeaker = String(line.speaker || "mira").toLowerCase();
+    speaker.className = `speaker-tag speaker-${normalizedSpeaker}`;
+    speaker.textContent = line.speaker || "Guide";
+
+    const text = document.createElement("p");
+    text.textContent = line.line || "";
+
+    row.append(speaker, text);
     savedModalDialogue.appendChild(row);
   });
 }
@@ -1245,8 +1350,36 @@ function moveSavedModalCarousel(step) {
     return;
   }
 
-  savedModalIndex = nextIndex;
+  setSavedModalIndex(nextIndex);
+}
+
+function setSavedModalIndex(index) {
+  if (!savedModalSlides.length) {
+    return;
+  }
+
+  const clamped = Math.max(0, Math.min(index, savedModalSlides.length - 1));
+  if (clamped === savedModalIndex) {
+    return;
+  }
+
+  savedModalIndex = clamped;
   updateSavedModalPosition();
+}
+
+function formatSavedModeLabel(comic) {
+  const mode = String(comic?.explanationMode || comic?.audience || "").toLowerCase();
+  if (!mode) {
+    return "Mode unknown";
+  }
+
+  const labelByMode = {
+    quick: "Quick mode",
+    clear: "Clear mode",
+    detailed: "Detailed mode",
+    technical: "Technical mode"
+  };
+  return labelByMode[mode] || `${capitalize(mode)} mode`;
 }
 
 async function exportComicPng(comic, options = { download: true }) {
@@ -1831,8 +1964,11 @@ function setBusy(isBusy) {
   generateButton.textContent = isBusy ? "Generating..." : "Generate";
 }
 
-function setStatus(message) {
+function setStatus(message, tone = "info") {
   statusText.textContent = message;
+  statusText.classList.remove("status-info", "status-success", "status-error");
+  const normalizedTone = ["success", "error"].includes(tone) ? tone : "info";
+  statusText.classList.add(`status-${normalizedTone}`);
 }
 
 function capitalize(value) {
