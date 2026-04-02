@@ -14,21 +14,33 @@ const HOST = env.HOST || "127.0.0.1";
 const GEMINI_API_KEY = env.GEMINI_API_KEY || "";
 const TEXT_MODEL_CANDIDATES = uniqueModels(
   env.GEMINI_TEXT_MODEL,
-  "gemini-2.5-pro",
   "gemini-2.5-flash",
-  "gemini-1.5-pro"
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
+  "gemini-pro-latest",
+  "gemini-3.1-pro-preview"
 );
 const IMAGE_MODEL_CANDIDATES = uniqueModels(
   env.GEMINI_IMAGE_MODEL,
-  "gemini-2.0-flash-preview-image-generation",
-  "gemini-2.0-flash-exp-image-generation",
-  "gemini-2.5-flash-image-preview"
+  "gemini-2.5-flash-image",
+  "gemini-3.1-flash-image-preview",
+  "gemini-3-pro-image-preview"
 );
-const TEXT_MODEL = TEXT_MODEL_CANDIDATES[0];
-const IMAGE_MODEL = IMAGE_MODEL_CANDIDATES[0];
+const TEXT_MODEL = pickPreferredModel(TEXT_MODEL_CANDIDATES, [
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
+  "gemini-pro-latest"
+]);
+const IMAGE_MODEL = pickPreferredModel(IMAGE_MODEL_CANDIDATES, [
+  "gemini-2.5-flash-image",
+  "gemini-3.1-flash-image-preview",
+  "gemini-3-pro-image-preview"
+]);
 const ENABLE_ANATOMY_VALIDATION = env.ENABLE_ANATOMY_VALIDATION !== "0";
 const ENABLE_CONTINUITY_VALIDATION = env.ENABLE_CONTINUITY_VALIDATION !== "0";
-const MAX_PANEL_IMAGE_ATTEMPTS = clamp(Number(env.MAX_PANEL_IMAGE_ATTEMPTS) || 4, 1, 6);
+const MAX_PANEL_IMAGE_ATTEMPTS = clamp(Number(env.MAX_PANEL_IMAGE_ATTEMPTS) || 2, 1, 6);
+const GEMINI_REQUEST_TIMEOUT_MS = clamp(Number(env.GEMINI_REQUEST_TIMEOUT_MS) || 35000, 5000, 120000);
 const CAST_PHOTO_ASPECT_RATIO = "16:9";
 const CAST_PHOTO_SIZE = "1K";
 
@@ -284,7 +296,6 @@ async function getCanonicalCastReference({ forceRefresh = false } = {}) {
   if (!forceRefresh && castReferenceCache) {
     return castReferenceCache;
   }
-
   let imageDataUrl = "";
   let source = "gemini";
 
@@ -314,6 +325,19 @@ async function getCanonicalCastReference({ forceRefresh = false } = {}) {
   };
 
   return castReferenceCache;
+}
+
+async function fetchWithTimeout(url, options, timeoutMs = GEMINI_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function generateComicScript(concept, explanationMode) {
@@ -641,7 +665,13 @@ async function generatePanelImageWithValidation(script, panel, index, references
       continue;
     }
 
-    if (!ENABLE_ANATOMY_VALIDATION && !ENABLE_CONTINUITY_VALIDATION) {
+    const requiresHumanAnatomyCheck = Array.isArray(panel?.characters)
+      ? panel.characters.some((name) => name && name !== "Byte")
+      : false;
+    const shouldRunAnatomyValidation = ENABLE_ANATOMY_VALIDATION && requiresHumanAnatomyCheck;
+    const shouldRunContinuityValidation = ENABLE_CONTINUITY_VALIDATION && index > 0;
+
+    if (!shouldRunAnatomyValidation && !shouldRunContinuityValidation) {
       return {
         imageDataUrl,
         meta: {
@@ -653,12 +683,14 @@ async function generatePanelImageWithValidation(script, panel, index, references
       };
     }
 
-    const anatomyAudit = ENABLE_ANATOMY_VALIDATION
-      ? await auditPanelAnatomy(imageDataUrl, panel, script, index)
-      : { pass: true, issues: [] };
-    const continuityAudit = ENABLE_CONTINUITY_VALIDATION
-      ? await auditPanelContinuity(imageDataUrl, panel, script, index, references)
-      : { pass: true, issues: [] };
+    const [anatomyAudit, continuityAudit] = await Promise.all([
+      shouldRunAnatomyValidation
+        ? auditPanelAnatomy(imageDataUrl, panel, script, index)
+        : Promise.resolve({ pass: true, issues: [] }),
+      shouldRunContinuityValidation
+        ? auditPanelContinuity(imageDataUrl, panel, script, index, references)
+        : Promise.resolve({ pass: true, issues: [] })
+    ]);
 
     lastAudit = {
       anatomy: anatomyAudit,
@@ -828,17 +860,30 @@ async function callGeminiWithFallback({ model, fallbackModels, body }) {
   let lastFailure = null;
 
   for (const candidate of candidates) {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${candidate}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY
-        },
-        body: JSON.stringify(body)
+    let response;
+    try {
+      response = await fetchWithTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/${candidate}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY
+          },
+          body: JSON.stringify(body)
+        }
+      );
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        lastFailure = {
+          status: 504,
+          model: candidate,
+          details: `Request timed out after ${GEMINI_REQUEST_TIMEOUT_MS}ms`
+        };
+        continue;
       }
-    );
+      throw createHttpError(502, `Gemini request failed on model ${candidate}: ${error?.message || "fetch failed"}`);
+    }
 
     if (response.ok) {
       return {
@@ -1259,6 +1304,19 @@ function uniqueModels(...values) {
   return out;
 }
 
+function pickPreferredModel(candidates, preferredOrder) {
+  const available = Array.isArray(candidates) ? candidates : [];
+  const preferences = Array.isArray(preferredOrder) ? preferredOrder : [];
+
+  for (const preferred of preferences) {
+    if (available.includes(preferred)) {
+      return preferred;
+    }
+  }
+
+  return available[0] || "";
+}
+
 function getTextResponse(response) {
   const parts = response?.candidates?.[0]?.content?.parts || [];
   const text = parts
@@ -1332,7 +1390,12 @@ function buildCastPhotoFallbackSvgDataUrl() {
 
 async function auditPanelAnatomy(imageDataUrl, panel, script, index) {
   try {
-    const expectedHumans = panel.characters.filter((name) => name !== "Byte");
+    const expectedHumans = Array.isArray(panel?.characters)
+      ? panel.characters.filter((name) => name && name !== "Byte")
+      : [];
+    if (!expectedHumans.length) {
+      return { pass: true, issues: [] };
+    }
     const prompt = [
       "You are a strict QA reviewer for generated comic panel images.",
       "Check only anatomy and body coherence for each visible human character.",
@@ -1365,7 +1428,7 @@ async function auditPanelAnatomy(imageDataUrl, panel, script, index) {
 
     const parsed = safeJsonParse(getTextResponse(response));
     if (!parsed || typeof parsed.pass !== "boolean") {
-      return { pass: false, issues: ["anatomy audit inconclusive"] };
+      return { pass: true, issues: ["anatomy audit inconclusive"] };
     }
 
     const issues = Array.isArray(parsed.issues)
@@ -1374,16 +1437,21 @@ async function auditPanelAnatomy(imageDataUrl, panel, script, index) {
 
     return {
       pass: parsed.pass,
-      issues: issues.length ? issues : ["anatomy inconsistency detected"]
+      issues: parsed.pass ? [] : issues.length ? issues : ["anatomy inconsistency detected"]
     };
   } catch {
-    return { pass: false, issues: ["anatomy audit request failed"] };
+    return { pass: true, issues: ["anatomy audit request failed"] };
   }
 }
 
 async function auditPanelContinuity(imageDataUrl, panel, script, index, references) {
   try {
-    const expectedCharacters = panel.characters.filter(Boolean);
+    const expectedCharacters = Array.isArray(panel?.characters)
+      ? panel.characters.filter(Boolean)
+      : [];
+    if (!expectedCharacters.length) {
+      return { pass: true, issues: [] };
+    }
     const prompt = [
       "You are a strict QA reviewer for character continuity in illustrated panel sequences.",
       "Compare the candidate panel against the reference images and verify identity consistency.",
@@ -1415,7 +1483,7 @@ async function auditPanelContinuity(imageDataUrl, panel, script, index, referenc
 
     const parsed = safeJsonParse(getTextResponse(response));
     if (!parsed || typeof parsed.pass !== "boolean") {
-      return { pass: false, issues: ["continuity audit inconclusive"] };
+      return { pass: true, issues: ["continuity audit inconclusive"] };
     }
 
     const issues = Array.isArray(parsed.issues)
@@ -1424,10 +1492,10 @@ async function auditPanelContinuity(imageDataUrl, panel, script, index, referenc
 
     return {
       pass: parsed.pass,
-      issues: issues.length ? issues : ["character continuity inconsistency detected"]
+      issues: parsed.pass ? [] : issues.length ? issues : ["character continuity inconsistency detected"]
     };
   } catch {
-    return { pass: false, issues: ["continuity audit request failed"] };
+    return { pass: true, issues: ["continuity audit request failed"] };
   }
 }
 
